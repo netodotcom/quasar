@@ -1,30 +1,23 @@
 <template>
   <q-page class="bg-grey-1">
     <div class="content-wrapper">
-      <!-- Header -->
       <div class="row items-center justify-between q-pa-md bg-white">
         <div class="text-h6">Reservar hotel</div>
       </div>
 
-      <!-- Search filters -->
       <div class="row q-pa-md bg-white q-mt-sm">
-        <div class="col-12 col-md-4 q-pr-md">
-          <q-input v-model="searchText" outlined dense label="Destino" @update:model-value="filterPlaces">
+        <div class="col-12 col-md-4 q-pr-md position-relative">
+          <q-input ref="searchInput" v-model="searchText" outlined dense label="Destino"
+            @update:model-value="handleInput" class="typeahead-input">
             <template v-slot:append>
               <q-icon name="location_on" color="grey-6" />
             </template>
           </q-input>
-          <q-menu v-model="showAutocomplete" fit anchor="bottom left" self="top left" v-if="filteredPlaces.length">
-            <q-list style="min-width: 100%">
-              <q-item v-for="place in filteredPlaces" :key="place.placeId" clickable v-close-popup
-                @click="selectPlace(place)">
-                <q-item-section>
-                  <q-item-label>{{ place.name }}, {{ place.state.shortname }}</q-item-label>
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
+          <div v-if="suggestion" class="suggestion-text">
+            {{ searchText }}{{ suggestion.substring(searchText.length) }}
+          </div>
         </div>
+
         <div class="col-12 col-md-8">
           <div class="row items-center justify-between">
             <div class="col-auto">
@@ -41,7 +34,6 @@
         </div>
       </div>
 
-      <!-- Breadcrumbs -->
       <div class="row q-px-md q-py-sm q-mt-sm">
         <q-breadcrumbs separator=">" class="text-grey-7">
           <q-breadcrumbs-el label="Início" class="cursor-pointer" />
@@ -50,13 +42,12 @@
         </q-breadcrumbs>
       </div>
 
-      <!-- Hotel listings -->
       <div class="q-mt-sm">
         <div v-for="hotel in displayedHotels" :key="hotel.id" class="bg-white q-mb-sm">
           <div class="row q-pa-md items-center">
             <div class="col-12 col-md-3">
               <q-carousel v-model="hotel.slide" infinite :autoplay="3000" arrows navigation class="rounded-borders"
-                style="height: 160px">
+                style="height: 200px">
                 <q-carousel-slide v-for="(image, index) in hotel.images" :key="index" :name="index" :img-src="image" />
               </q-carousel>
             </div>
@@ -97,49 +88,34 @@
             </div>
           </div>
         </div>
+        <div v-if="loading" class="flex flex-center q-pa-md">
+          <q-spinner-dots color="primary" size="40px" />
+        </div>
       </div>
     </div>
 
-    <!-- Hotel details drawer -->
-    <q-drawer v-model="drawerOpen" side="right" bordered :width="600" class="bg-white">
-      <q-scroll-area style="height: 100%;">
-        <div v-if="selectedHotel" class="q-pa-md">
-          <div class="text-h5 q-mb-md">{{ selectedHotel.name }}</div>
-          <q-carousel v-model="slide" swipeable animated navigation infinite :autoplay="3000" arrows
-            class="rounded-borders">
-            <q-carousel-slide v-for="(image, index) in selectedHotel.images" :key="index" :name="index"
-              :img-src="image" />
-          </q-carousel>
-
-          <div class="q-mt-lg">
-            <div class="text-body1">{{ selectedHotel.description }}</div>
-            <div class="text-h6 q-mt-lg">Comodidades do Hotel</div>
-            <div class="row q-mt-md q-gutter-sm">
-              <q-chip v-for="(amenity, index) in selectedHotel.amenities" :key="index" outline color="primary">
-                {{ amenity.label }}
-              </q-chip>
-            </div>
-          </div>
-        </div>
-      </q-scroll-area>
-    </q-drawer>
+    <template>
+  <HotelDetailsDrawer
+    v-model="showDrawer"
+    :hotel="selectedHotel"
+    @book="handleBooking"
+    @favorite="handleFavorite"
+  />
+</template>
   </q-page>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useQuasar } from 'quasar'
-
+import { HotelDetailsDrawer } from '../components/HotelDetails.vue'
 const places = ref([])
 const hotels = ref([])
 const searchText = ref('')
-const filteredPlaces = ref([])
-const showAutocomplete = ref(false)
 const selectedPlace = ref(null)
 const sortBy = ref('recommended')
 const drawerOpen = ref(false)
 const selectedHotel = ref(null)
-const slide = ref(0)
 
 const quasar = useQuasar()
 const batchSize = 10
@@ -152,39 +128,64 @@ const selectedPlaceName = computed(() => {
   return `${selectedPlace.value.name}, ${selectedPlace.value.state.shortname}`
 })
 
-const filterPlaces = () => {
-  if (!searchText.value) {
-    filteredPlaces.value = []
-    showAutocomplete.value = false
+const suggestion = ref('')
+
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
+
+
+const handleInput = (value) => {
+  if (!value) {
+    suggestion.value = ''
+    selectedPlace.value = null
     return
   }
 
-  const search = searchText.value.toLowerCase()
-  filteredPlaces.value = places.value.filter(place =>
-    place.name.toLowerCase().includes(search) ||
-    place.state.shortname.toLowerCase().includes(search)
+  const match = places.value.find(place =>
+    place.name.toLowerCase().startsWith(value.toLowerCase())
   )
-  showAutocomplete.value = true
+
+  if (match) {
+    suggestion.value = match.name
+    if (value.toLowerCase() === match.name.toLowerCase()) {
+      selectedPlace.value = match
+      filterHotels()
+    }
+  } else {
+    suggestion.value = ''
+    selectedPlace.value = null
+  }
 }
 
-const selectPlace = (place) => {
-  selectedPlace.value = place
-  searchText.value = `${place.name}, ${place.state.shortname}`
-  showAutocomplete.value = false
+const handleKeyDown = (e) => {
+  if (e.key === 'Tab' || e.key === 'ArrowRight') {
+    if (suggestion.value) {
+      searchText.value = suggestion.value
+      const match = places.value.find(place =>
+        place.name.toLowerCase() === suggestion.value.toLowerCase()
+      )
+      if (match) {
+        selectedPlace.value = match
+        filterHotels()
+      }
+      e.preventDefault()
+    }
+  }
 }
 
 const filteredHotels = computed(() => {
-  let filtered = hotels.value
+  if (!selectedPlace.value) return hotels.value
 
-  if (selectedPlace.value) {
-    filtered = filtered.filter(hotel =>
-      hotel.address.city === selectedPlace.value.name
-    )
-  }
-
-  return filtered
+  return hotels.value.filter(hotel =>
+    hotel.address.city.toLowerCase() === selectedPlace.value.name.toLowerCase()
+  )
 })
-
 const filterHotels = () => {
   resetAndLoadHotels()
 }
@@ -203,8 +204,27 @@ const sortHotels = () => {
   resetAndLoadHotels()
 }
 
+const hotelStars = ref(5)
+
+const getAmenityIcon = (key) => {
+  return {
+    wifi: 'wifi',
+    pool: 'pool',
+    restaurant: 'restaurant',
+    parking: 'local_parking',
+    gym: 'fitness_center',
+    spa: 'spa',
+    breakfast: 'restaurant',
+    bar: 'local_bar',
+    laundry: 'local_laundry_service',
+    ac: 'ac_unit',
+    tv: 'tv'
+  }[key] || 'check'
+}
+
 const openDrawer = (hotel) => {
   selectedHotel.value = hotel
+  hotelStars.value = hotel.stars || 5
   drawerOpen.value = true
 }
 
@@ -212,6 +232,7 @@ const loadMoreHotels = () => {
   if (loading.value || allHotelsLoaded.value) return
 
   loading.value = true
+
   setTimeout(() => {
     const nextBatch = filteredHotels.value.slice(
       displayedHotels.value.length,
@@ -219,10 +240,11 @@ const loadMoreHotels = () => {
     )
     displayedHotels.value = displayedHotels.value.concat(nextBatch)
     loading.value = false
-    if (displayedHotels.value.length === filteredHotels.value.length) {
+
+    if (displayedHotels.value.length >= filteredHotels.value.length) {
       allHotelsLoaded.value = true
     }
-  }, 500)
+  }, 2000)
 }
 
 const resetAndLoadHotels = () => {
@@ -264,6 +286,27 @@ const handleScroll = () => {
 </script>
 
 <style scoped>
+.position-relative {
+  position: relative;
+}
+
+.suggestion-text {
+  position: absolute;
+  left: 12px;
+  top: 65%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #999;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.typeahead-input :deep(input) {
+  position: relative;
+  background: transparent;
+  z-index: 2;
+}
+
 .content-wrapper {
   max-width: 1200px;
   margin: 0 auto;
@@ -321,5 +364,18 @@ const handleScroll = () => {
 :deep(.q-carousel__navigation-icon) {
   font-size: 8px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+:deep(.q-drawer-container) {
+  width: 100vw !important;
+}
+
+:deep(.q-drawer) {
+  position: fixed;
+  height: 100vh;
+}
+
+:deep(.q-page-container) {
+  padding-right: 0 !important;
 }
 </style>
