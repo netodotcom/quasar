@@ -33,9 +33,9 @@ export interface Place {
 export interface Amenity {
     key: string;
     label: string;
-  }
-  
-  export interface Address {
+}
+
+export interface Address {
     street?: string;
     number?: string;
     district?: string;
@@ -44,9 +44,9 @@ export interface Amenity {
     country?: string;
     zipCode?: string | null;
     fullAddress: string;
-  }
-  
-  export interface Hotel {
+}
+
+export interface Hotel {
     id: number;
     favorite: boolean;
     name: string;
@@ -59,5 +59,6 @@ export interface Amenity {
     hasAgreement: boolean;
     nonRefundable: boolean | null;
     address: Address;
-    images: string[]
-  }
+    images: string[];
+    price?: string | number
+}

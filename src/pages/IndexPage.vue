@@ -94,21 +94,15 @@
       </div>
     </div>
 
-    <template>
-  <HotelDetailsDrawer
-    v-model="showDrawer"
-    :hotel="selectedHotel"
-    @book="handleBooking"
-    @favorite="handleFavorite"
-  />
-</template>
+    <HotelDetailsDrawer v-model="drawerOpen" :hotel="selectedHotel" @book="handleBooking" @favorite="handleFavorite" />
+
   </q-page>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useQuasar } from 'quasar'
-import { HotelDetailsDrawer } from '../components/HotelDetails.vue'
+import HotelDetailsDrawer from '../components/HotelDetails.vue'
 const places = ref([])
 const hotels = ref([])
 const searchText = ref('')
@@ -206,21 +200,6 @@ const sortHotels = () => {
 
 const hotelStars = ref(5)
 
-const getAmenityIcon = (key) => {
-  return {
-    wifi: 'wifi',
-    pool: 'pool',
-    restaurant: 'restaurant',
-    parking: 'local_parking',
-    gym: 'fitness_center',
-    spa: 'spa',
-    breakfast: 'restaurant',
-    bar: 'local_bar',
-    laundry: 'local_laundry_service',
-    ac: 'ac_unit',
-    tv: 'tv'
-  }[key] || 'check'
-}
 
 const openDrawer = (hotel) => {
   selectedHotel.value = hotel
